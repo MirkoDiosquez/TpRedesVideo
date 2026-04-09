@@ -10,7 +10,7 @@ http://localhost:8080
 
 
 -Primer paso : Abrimos la "máquina virtual" con el  
- docker run -ri -p 8080:80
+ docker run -ri -p 8080:80 ubuntu:latest bash
 
  Segundo paso : Instalar Nginx.
  apt update
@@ -30,3 +30,87 @@ http://localhost:8080
 
 
  Veremos la página con el html básico. Modificar con algunas cosas a gusto.
+
+
+
+ B — Configuración por path
+Servir el sitio estático B en un subdirectorio del servidor principal. El sitio debe ser accesible desde: http://localhost/static
+
+
+Primer paso : Abrimos la "Máquina virutal" con el docker.
+docker run -ri -p 8585:85 ubuntu:latest bash
+
+( No es lo más recomendable cambiar el puerto interno )
+
+Esto te deja dentro del contenedor listo para instalar cosas.
+
+Repetimos los mismos paso.
+
+apt update
+apt install nginx
+apt install nano
+
+service nginx status
+service nginx start.
+
+
+Ahi ya tenemos todo
+
+Ahora hacemos algo distinto.
+
+Segundo paso: Creamos una carpeta en cualquier parte. En nuestro caso, la creamos en /var
+
+mkdir carpetaAuxiliar <- nombre de la carpeta que vamos a utilizar.
+
+Tercer paso : hacemos el archivo html y ponemos cosas adentro para verlo proximamente en la página.
+
+nano /var/carpetaAuxiliar/index.html
+
+Cuarto paso: Una vez hecho el nano, escribimos 3 cosas para ver que nos va a salir y guardamos. Despues de eso escribimos el siguiente comando.
+
+nano /etc/nginx/sites-available/default
+
+
+ese comando sirve para cambiar la ruta del archivo donde abre la carpeta el cual salta la página predeterminada de Nginx.
+
+
+nos devolvera algo asi
+
+
+server {
+    listen 80;
+listen [::]:80;
+
+location {
+    alias /var/www/html;
+}
+
+}
+
+
+Nosotros lo modificamos asi
+
+listen 85;
+listen [::]:85;
+
+location /static/ {
+    alias /var/carpetaAuxiliar/;
+}
+
+
+Pasos Opcionales :
+
+ls -ld /var/carpetaAuxiliar/
+nginx -t
+
+Ambos 2 son para ver si tiene permisos para ver los permisos actuales y si existe un error.
+
+
+Cuarto paso : Reiniciar nginx 
+
+service nginx restart 
+
+Quinto paso : Corroborar si funciona
+
+http://localhost:8585/static/
+
