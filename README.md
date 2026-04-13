@@ -122,6 +122,7 @@ http://localhost:8585/static/
 C — Configuración por dominio (Virtual Host)
 Configurar un Virtual Host para que el sitio C sea accesible mediante un nombre de dominio local. Para esto:
 
+// ESTE PASO LO HACEMOS DESDE VIRTUAL BOX
 
 Paso 1 — Instalar NGINX
 bashsudo apt update
@@ -171,3 +172,138 @@ Agregar esta línea:
 Paso 6 — Verificar que funciona
 bashcurl http://misitio.com
 Resultado esperado: el HTML con "Bienvenido a misitio.com".
+
+
+
+D — Crear una aplicación Java Spring Boot mínima (Hola Mundo) y correrla en el servidor en un puerto distinto al 80 (ej: 8000)
+Configurar el servidor web (Apache o NGINX) para actuar como reverse proxy hacia la aplicación Java que corre en localhost:8000.
+La aplicación debe ser accesible desde: http://<IP-del-servidor>/app/
+
+El servidor web debe redirigir internamente las peticiones a /app/ hacia la aplicación Java que está corriendo en el puerto 8000.
+
+
+Tutorial: Spring Boot + NGINX Reverse Proxy con Docker
+
+Contexto inicial
+Este tutorial asume que tenés Docker instalado. Todo se hace desde una terminal. No necesitás instalar Java ni Maven en tu máquina real, todo corre dentro del contenedor.
+
+Paso 1 — Levantar un contenedor Ubuntu
+bashdocker run -it --name mi-servidor -p 8888:80 -p 9000:8000 ubuntu:latest bash
+Esto levanta un Ubuntu limpio y te mete adentro. El prompt cambia a algo como root@xxxxxxx:/#.
+Qué hace cada parte:
+
+-it → modo interactivo (podés escribir comandos)
+--name mi-servidor → le da un nombre al contenedor
+-p 8888:80 → mapea el puerto 80 del contenedor al 8888 de tu máquina
+-p 9000:8000 → mapea el puerto 8000 del contenedor al 9000 de tu máquina
+
+
+Paso 2 — Instalar Java, Maven y NGINX
+bashapt update && apt install -y openjdk-17-jdk maven nginx nano curl
+Cuando pregunte la región, elegí America → Buenos_Aires.
+Verificar que se instaló todo:
+bashjava -version && mvn -version && nginx -v
+Deberías ver las versiones de cada uno sin errores.
+
+Paso 3 — Crear la estructura del proyecto
+bashmkdir -p ~/holamundo/src/main/java/com/example
+mkdir -p ~/holamundo/src/main/resources
+cd ~/holamundo
+
+Paso 4 — Crear los archivos de la app
+4.1 — App.java (el controlador que responde "Hola Mundo")
+bashnano src/main/java/com/example/App.java
+javapackage com.example;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@SpringBootApplication
+@RestController
+public class App {
+
+    public static void main(String[] args) {
+        SpringApplication.run(App.class, args);
+    }
+
+    @GetMapping("/")
+    public String holaMundo() {
+        return "Hola Mundo desde Spring Boot!";
+    }
+}
+Guardar: Ctrl+O → Enter → Ctrl+X
+
+4.2 — application.properties (configura el puerto y la ruta)
+bashnano src/main/resources/application.properties
+server.port=8000
+server.servlet.context-path=/app
+Guardar: Ctrl+O → Enter → Ctrl+X
+
+4.3 — pom.xml (dependencias del proyecto Java)
+bashnano pom.xml
+xml<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>holamundo</artifactId>
+    <version>1.0</version>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+Guardar: Ctrl+O → Enter → Ctrl+X
+
+Paso 5 — Compilar el proyecto
+bashmvn clean package -DskipTests
+Tarda unos minutos porque descarga las dependencias. Al final tiene que aparecer BUILD SUCCESS.
+
+Paso 6 — Arrancar la app Spring Boot
+bashjava -jar target/holamundo-1.0.jar &
+El & la corre en segundo plano para poder seguir usando la terminal. Esperás a ver Started App in X seconds y verificás que funciona:
+bashcurl http://localhost:8000/app/
+Deberías ver: Hola Mundo desde Spring Boot!
+
+Paso 7 — Configurar NGINX como Reverse Proxy
+bashnano /etc/nginx/sites-available/default
+Borrás todo y pegás esto:
+nginxserver {
+    listen 80;
+
+    location /app/ {
+        proxy_pass http://localhost:8000/app/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+Guardar: Ctrl+O → Enter → Ctrl+X
+Iniciás NGINX:
+bashservice nginx start
+
+Paso 8 — Verificar que todo funciona
+bashcurl http://localhost/app/
+Deberías ver de nuevo: Hola Mundo desde Spring Boot!
+La diferencia con el paso 6 es que ahora la petición entra por el puerto 80 de NGINX, que la redirige internamente al puerto 8000 de Spring Boot. El usuario final solo ve /app/, nunca el puerto 8000.
